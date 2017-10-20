@@ -35,9 +35,9 @@
     </description>
 
     <scm>
-        <connection>scm:svn:http://svn.apache.org/repos/asf/sling/trunk/contrib/extensions/startup-filter</connection>
-        <developerConnection>scm:svn:http://svn.apache.org/repos/asf/sling/trunk/contrib/extensions/startup-filter</developerConnection>
-        <url>http://svn.apache.org/repos/asf/sling/trunk/contrib/extensions/startup-filter</url>
+        <connection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-startupfilter.git</conncetion>
+        <developerConnection>scm:git:https://gitbox.apache.org/repos/asf/sling-org-apache-sling-startupfilter.git</developerConnection>
+        <url>https://gitbox.apache.org/repos/asf?p=sling-org-apache-sling-startupfilter.git</url>
     </scm>
 
     <build>
