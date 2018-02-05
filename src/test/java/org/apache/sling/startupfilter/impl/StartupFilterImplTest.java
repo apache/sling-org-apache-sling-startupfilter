@@ -23,8 +23,6 @@ import static org.junit.Assert.assertEquals;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.Dictionary;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.servlet.Filter;
@@ -35,6 +33,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.sling.startupfilter.StartupInfoProvider;
+import org.apache.sling.startupfilter.impl.StartupFilterImpl.Config;
 import org.hamcrest.Description;
 import org.jmock.Expectations;
 import org.jmock.Mockery;
@@ -94,8 +93,8 @@ public class StartupFilterImplTest {
         }
     }
     static private class TestFilterImpl extends StartupFilterImpl {
-        void setup(BundleContext ctx, Map<String, Object> props) throws Exception {
-            activate(ctx, props);
+        void setup(BundleContext ctx, StartupFilterImpl.Config config) throws Exception {
+            activate(ctx, config);
         }
     };
 
@@ -167,11 +166,13 @@ public class StartupFilterImplTest {
         messageWriter = new StringWriter();
         final PrintWriter responseWriter = new PrintWriter(messageWriter);
 
-        final Map<String, Object> props = new HashMap<String, Object>();
-        props.put(StartupFilterImpl.ACTIVE_BY_DEFAULT_PROP, Boolean.TRUE);
-
+        final Config cfg = mockery.mock(StartupFilterImpl.Config.class);
         final ServiceReference [] providerRefs = provider == null ? null : new ServiceReference[] { provider };
         mockery.checking(new Expectations() {{
+            allowing(cfg).active_by_default();
+            will(returnValue(true));
+            allowing(cfg).default_message();
+            will(returnValue(StartupFilterImpl.DEFAULT_MESSAGE));
             allowing(bundleContext).createFilter(with(any(String.class)));
             allowing(bundleContext).addServiceListener(with(any(ServiceListener.class)));
             allowing(bundleContext).addServiceListener(with(any(ServiceListener.class)), with(any(String.class)));
@@ -211,7 +212,7 @@ public class StartupFilterImplTest {
             allowing(chain).doFilter(with(any(ServletRequest.class)), with(any(ServletResponse.class)));
         }});
 
-        filter.setup(bundleContext, props);
+        filter.setup(bundleContext, cfg);
     }
 
     private String getPathInfo() {

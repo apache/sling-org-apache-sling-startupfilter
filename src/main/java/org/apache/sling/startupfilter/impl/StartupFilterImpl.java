@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Hashtable;
 import java.util.List;
-import java.util.Map;
 
 import javax.servlet.Filter;
 import javax.servlet.FilterChain;
@@ -33,14 +32,6 @@ import javax.servlet.ServletResponse;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.apache.felix.scr.annotations.Activate;
-import org.apache.felix.scr.annotations.Component;
-import org.apache.felix.scr.annotations.Deactivate;
-import org.apache.felix.scr.annotations.Property;
-import org.apache.felix.scr.annotations.Reference;
-import org.apache.felix.scr.annotations.ReferenceCardinality;
-import org.apache.felix.scr.annotations.ReferencePolicy;
-import org.apache.felix.scr.annotations.Service;
 import org.apache.sling.startupfilter.StartupFilter;
 import org.apache.sling.startupfilter.StartupFilterDisabler;
 import org.apache.sling.startupfilter.StartupInfoProvider;
@@ -48,7 +39,16 @@ import org.osgi.framework.BundleContext;
 import org.osgi.framework.Constants;
 import org.osgi.framework.ServiceReference;
 import org.osgi.framework.ServiceRegistration;
+import org.osgi.service.component.annotations.Activate;
+import org.osgi.service.component.annotations.Component;
+import org.osgi.service.component.annotations.Deactivate;
+import org.osgi.service.component.annotations.Reference;
+import org.osgi.service.component.annotations.ReferenceCardinality;
+import org.osgi.service.component.annotations.ReferencePolicy;
 import org.osgi.service.http.whiteboard.HttpWhiteboardConstants;
+import org.osgi.service.metatype.annotations.AttributeDefinition;
+import org.osgi.service.metatype.annotations.Designate;
+import org.osgi.service.metatype.annotations.ObjectClassDefinition;
 import org.osgi.util.tracker.ServiceTracker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,9 +56,23 @@ import org.slf4j.LoggerFactory;
 /** StartupFilter implementation. Initially registered
  *  as a StartupFilter only, the Filter registration
  *  is dynamic, on-demand. */
-@Component(immediate=true, metatype=true)
-@Service(value=StartupFilter.class)
+@Component(service = {StartupFilter.class})
+@Designate(ocd = StartupFilterImpl.Config.class)
 public class StartupFilterImpl implements StartupFilter, Filter {
+
+    @ObjectClassDefinition(name = "Apache Sling Startup Filter",
+            description="Rejects Sling requests with a 503 error code during startup.")
+    public static @interface Config {
+
+        @AttributeDefinition(name = "Active by default?",
+                description = "If true, the filter is active as soon as the service starts.")
+        boolean active_by_default() default true;
+
+        @AttributeDefinition(name = "Default message",
+                description = "The default message is returned in the HHTTP response of the filter, " +
+                  "followed by any messages supplied by StartupInfoProvider services.")
+        String default_message() default StartupFilterImpl.DEFAULT_MESSAGE;
+    }
 
     private final Logger log = LoggerFactory.getLogger(getClass());
     private ServiceRegistration<Filter> filterServiceRegistration;
@@ -66,24 +80,18 @@ public class StartupFilterImpl implements StartupFilter, Filter {
     private ServiceTracker<StartupInfoProvider, StartupInfoProvider> providersTracker;
     private int providersTrackerCount = -1;
 
-    private final List<StartupInfoProvider> providers = new ArrayList<StartupInfoProvider>();
-
-    @Property(boolValue=true)
-    public static final String ACTIVE_BY_DEFAULT_PROP = "active.by.default";
-    private boolean defaultFilterActive;
+    private final List<StartupInfoProvider> providers = new ArrayList<>();
 
     public static final String DEFAULT_MESSAGE = "Startup in progress";
 
-    @Property(value=DEFAULT_MESSAGE)
-    public static final String DEFAULT_MESSAGE_PROP = "default.message";
-    private String defaultMessage;
-
-    @Reference(cardinality=ReferenceCardinality.OPTIONAL_UNARY, policy=ReferencePolicy.DYNAMIC)
+    @Reference(policy=ReferencePolicy.DYNAMIC, cardinality=ReferenceCardinality.OPTIONAL)
     private volatile StartupFilterDisabler startupFilterDisabler;
 
     private static final String FRAMEWORK_PROP_MANAGER_ROOT = "felix.webconsole.manager.root";
     static final String DEFAULT_MANAGER_ROOT = "/system/console";
     private String managerRoot;
+
+    private Config config;
 
     /** @inheritDoc */
     @Override
@@ -112,7 +120,7 @@ public class StartupFilterImpl implements StartupFilter, Filter {
         updateProviders();
 
         final StringBuilder sb = new StringBuilder();
-        sb.append(defaultMessage);
+        sb.append(config.default_message());
         for(StartupInfoProvider p : providers) {
             sb.append('\n');
             sb.append(p.getProgressInfo());
@@ -163,22 +171,19 @@ public class StartupFilterImpl implements StartupFilter, Filter {
     }
 
     @Activate
-    protected void activate(final BundleContext ctx, final Map<String, Object> properties) throws InterruptedException {
+    protected void activate(final BundleContext ctx,
+            final Config config) throws InterruptedException {
         bundleContext = ctx;
 
         providersTracker = new ServiceTracker(bundleContext, StartupInfoProvider.class, null);
         providersTracker.open();
 
-        Object prop = properties.get(DEFAULT_MESSAGE_PROP);
-        defaultMessage = prop == null ? DEFAULT_MESSAGE : prop.toString();
+        this.config = config;
 
-        prop = properties.get(ACTIVE_BY_DEFAULT_PROP);
-        defaultFilterActive = (prop instanceof Boolean ? (Boolean)prop : false);
-
-        prop = bundleContext.getProperty(FRAMEWORK_PROP_MANAGER_ROOT);
+        final String prop = bundleContext.getProperty(FRAMEWORK_PROP_MANAGER_ROOT);
         managerRoot = prop == null ? DEFAULT_MANAGER_ROOT : prop.toString();
 
-        if(defaultFilterActive) {
+        if(config.active_by_default()) {
             enable();
         }
         log.info("Activated, enabled={}, managerRoot={}", isEnabled(), managerRoot);
@@ -197,7 +202,7 @@ public class StartupFilterImpl implements StartupFilter, Filter {
     public synchronized void enable() {
         if (filterServiceRegistration == null) {
             final String pattern = "/";
-            final Hashtable<String, Object> params = new Hashtable<String, Object>();
+            final Hashtable<String, Object> params = new Hashtable<>();
             params.put(Constants.SERVICE_RANKING, 0x9000); // run before RequestLoggerFilter (0x8000)
             params.put("sling.filter.scope", "REQUEST");
             params.put(HttpWhiteboardConstants.HTTP_WHITEBOARD_CONTEXT_SELECT,
