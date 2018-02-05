@@ -56,7 +56,7 @@ import org.slf4j.LoggerFactory;
 /** StartupFilter implementation. Initially registered
  *  as a StartupFilter only, the Filter registration
  *  is dynamic, on-demand. */
-@Component(service = {StartupFilter.class})
+@Component(service = {StartupFilter.class}, immediate=true)
 @Designate(ocd = StartupFilterImpl.Config.class)
 public class StartupFilterImpl implements StartupFilter, Filter {
 
